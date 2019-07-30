@@ -1,0 +1,171 @@
+# Created for Policy Brief for Introduction to Python Workshop
+# UP Data Science for Public Policy Program
+# Co-authors: Geraldine Guarin and George Douglas Siton
+
+## PRELIMINARIES
+ 
+#   Custom functions
+from airbnbfunctionsfinalver import *
+ 
+#   Selenium import for javascript encrypted code
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+ 
+#   I want you and your Beautiful Soup...
+from bs4 import BeautifulSoup
+ 
+# Other functions
+import requests
+import numpy
+import pandas
+import subprocess
+import re
+import time
+import datetime
+import json
+ 
+# Chrome driver via Selenium
+driver = input('Enter your local address of the driver here. Tip: Use SHIFT + Right Click and copy path of webdriver.exe file.  Note: Use double backslash')
+ 
+## RESULTS PAGES LIST
+ 
+regions = ['Ilocos-Region','Cagayan-Valley','Cordillera Administrative Region','Central-Luzon','NCR','Calabarzon','MIMAROPA','Bicol',\
+    'Western-Visayas','Central-Visayas','Eastern-Visayas',\
+    'Zamboanga-Peninsula','Northern-Mindanao','Davao-Region','SOCCSKSARGEN','Caraga','Autonomous-Region-in-Muslim-Mindanao']
+ 
+# Make initial empty resultslist, and dump initial empty list for copy as savepoint (IGNORE IF: some scraping has been already done.)
+resultslist = []
+with open('resultslist.txt','w') as file:
+    json.dump(resultslist,file)
+ 
+# Looping across regions for search results
+for search in regions:
+ 
+    # Open search results for area
+    airbnbph = 'https://www.airbnb.com/s/' + search + '--Philippines'
+ 
+    # Using custom function to scrape results list from search of area
+    results = airbnbresults(airbnbph,driver)
+     
+    # Loading from .txt file (savepoint)
+    with open('resultslist.txt','r') as file:
+        resultslist = json.load(file)
+ 
+    # Make main list of results from all search results
+    resultslist.extend(list(results))
+ 
+    # Overwrite existing savepoint with extended results list
+    with open('resultslist.txt','w') as file:
+        json.dump(resultslist,file)
+ 
+## DOWNLOADING LISTING LINKS
+ 
+# Loading resultslist from savepoint
+with open('resultslist.txt','r') as file:
+    resultslist = json.load(file)
+ 
+# Scraping room list from every result page
+roomlist = roomlinks(resultslist,driver)
+print('There are %d listings!' %len(roomlist) )
+ 
+# Dumping accumulated room list for savepoint
+with open('roomlist.txt','w') as file:
+    json.dump(roomlist,file)
+ 
+## ROOM DATA SCRAPING
+ 
+# Loading room list from save point
+with open('roomlist.txt','r') as file:
+    roomlist = json.load(file)
+ 
+# Re-attempt rooms that had error in initial scraping
+'''
+with open('errorlist.txt','r') as file:
+    roomlist = json.load(file)
+    for i,item in enumerate(roomlist):
+        room = 'https://www.airbnb.com/rooms/' + item[:-2]
+        print(room)
+        roomlist[i] = room
+'''
+ 
+# Dumping initial values of index for savepoint of last scrape (IGNORE IF: scraping has already been done)
+values = [0,50]
+with open('firstlast.txt','w') as file:
+     json.dump(values,file)
+ 
+# Loading index of values from savepoint
+with open('firstlast.txt','r') as file:
+     values = json.load(file)
+ 
+first = values[0]
+last = values[1]
+ 
+# Looping over accumulated room list; each loop scrapes 50 rooms
+while True:
+ 
+    # As total rooms may not be divisible by 50, change last loop to less than 50 rooms
+    if last >= len(roomlist):
+        last = len(roomlist) - 1
+ 
+    # Scraping room data using custom function (scrapes 50 rooms at max)
+    table_values,row_headers,column_headers = roomdata(roomlist,driver,first,last)
+ 
+    # Dumping table and row data into corresponding savepoints
+    with open('tablevalues.txt','r') as file:
+        table_values_main = json.load(file)
+    with open('rowheaders.txt','r') as file:
+        row_headers_main = json.load(file)
+     
+    # Extending table and row data from recent loop of scraping
+    with open('tablevalues.txt','w') as file:
+        table_values_main.extend(table_values)
+        json.dump(table_values_main,file)
+    with open('rowheaders.txt','w') as file:
+        row_headers_main.extend(row_headers)
+        json.dump(row_headers_main,file)
+     
+    # Re-writing index of values and dumping for savepoint
+    with open('firstlast.txt','w') as file:
+        values = []
+        values.append(first)
+        values.append(last)
+        json.dump(values,file)
+ 
+    if last >= len(roomlist):
+        break
+ 
+    # Add 50 for next 50 rooms
+    first = first + 50
+    last = last + 50
+ 
+## SAVING SCRAPED DATA TO CSV FILE
+ 
+# Load tabular data
+with open('tablevalues.txt','r') as file:
+    table_values = json.load(file)
+ 
+# Load row (ID) names
+with open('rowheaders.txt','r') as file:
+    row_headers = json.load(file)
+ 
+# Fixed list for column (i.e. variable) names
+column_headers= ['stamp','housetype','price','gmaplink','latlong','title','reviewcount','ratingvalue','guests','roomtype',\
+    'beds','bath','sleep','cancel','minimumstay','amenities','excluded']
+ 
+# Creating panda data frame
+data_frame = \
+    pandas.DataFrame\
+    (data = numpy.array(table_values),index = row_headers, columns = column_headers)
+ 
+# Logging for loaded data frame. OPTIONAL: printing data frame...
+print('These are the row headers: \n%s\n' %row_headers)
+print('These are the column headers: \n%s\n' %column_headers)
+print('These are the table values: \n%s\n'%table_values)
+print('This is the data frame: \n%s\n'%data_frame)
+print('Saving data frame to csv...\n')
+ 
+# Saving data frame to CSV file
+data_frame.to_csv('policynotefinalver.csv')
+ 
+# Describing data frame
+print(data_frame[1:][:].describe())
